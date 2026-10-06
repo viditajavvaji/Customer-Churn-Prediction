@@ -1,0 +1,8 @@
+﻿Name,SeniorCitizen,tenure,MonthlyCharges,TotalCharges,gender,Partner,Dependents,PhoneService,MultipleLines,InternetService,OnlineSecurity,OnlineBackup,DeviceProtection,TechSupport,StreamingTV,StreamingMovies,Contract,PaperlessBilling,PaymentMethod
+Aarav Mehta,1,60,40.72,2441.11,Male,Yes,Yes,No,No phone service,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Two year,Yes,Bank transfer (automatic)
+Maya Patel,0,72,102.21,7138.57,Female,Yes,No,Yes,Yes,DSL,No internet service,Yes,No,Yes,Yes,No internet service,Two year,No,Mailed check
+Rohan Iyer,0,3,64.38,201.81,Male,Yes,Yes,Yes,No phone service,DSL,Yes,Yes,No,Yes,No,No internet service,Month-to-month,No,Credit card (automatic)
+Anika Shah,1,24,82.51,1985.44,Female,Yes,Yes,Yes,Yes,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,No,Electronic check
+Kabir Rao,0,3,106.66,316.01,Female,No,No,No,No phone service,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Two year,No,Mailed check
+Diya Nair,1,24,66.97,1589.94,Male,Yes,No,No,No phone service,Fiber optic,No,Yes,Yes,No internet service,Yes,Yes,Month-to-month,No,Mailed check
+Ishaan Das,1,12,64.95,752.73,Female,Yes,No,No,No phone service,DSL,No,No,No,No,Yes,No,One year,Yes,Credit card (automatic)

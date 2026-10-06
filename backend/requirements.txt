@@ -1,0 +1,9 @@
+# Python 3.12 has prebuilt wheels for this scikit-learn release. The notebook's
+# original artifact was serialized with scikit-learn 1.2.2; see README for the
+# compatibility note and re-export instructions if loading warns or fails.
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+scikit-learn==1.5.2
+numpy==1.26.4
+pandas==2.2.3
+joblib==1.4.2
