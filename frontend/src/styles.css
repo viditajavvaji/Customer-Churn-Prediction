@@ -112,12 +112,16 @@ select option { background: var(--surface); color: var(--ink); }
 .result-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .7px; }
 .prediction-summary h3 { margin: 7px 0 0; color: var(--accent); font-size: 20px; font-weight: 650; }
 .prediction-summary.churn h3 { color: var(--risk-ink); }
-.result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .result-section { min-width: 0; padding: 15px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
 .result-section h3 { margin: 0 0 10px; color: var(--ink); font-size: 14px; font-weight: 600; }
 .result-section ul { margin: 0; padding-left: 18px; color: var(--ink); font-size: 13px; line-height: 1.8; }
 .result-section p { margin: 0; color: var(--muted); font-size: 12px; }
-.recommendations { margin-top: 14px; background: var(--surface-soft); }
+.ai-analysis { margin-top: 14px; background: var(--surface-soft); }
+.result-section .ai-disclosure { margin: -2px 0 12px; font-size: 11px; }
+.result-section .ai-summary { color: var(--ink); font-size: 13px; line-height: 1.7; }
+.result-section h4 { margin: 15px 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.result-section .ai-error { color: #a43c2e; }
+:root[data-theme="dark"] .result-section .ai-error { color: #f2b2a6; }
 .result-footer { justify-content: flex-end; }
 
 @media (max-width: 720px) {
@@ -140,7 +144,6 @@ select option { background: var(--surface); color: var(--ink); }
   .prediction-summary { grid-template-columns: 1fr; }
   .prediction-summary > div { padding: 12px 14px; border-right: 0; border-bottom: 1px solid var(--line); }
   .prediction-summary > div:last-child { border-bottom: 0; }
-  .result-grid { grid-template-columns: 1fr; }
   .form-footer { align-items: flex-start; }
   .result-footer { flex-direction: column-reverse; }
   .result-footer button { width: 100%; }

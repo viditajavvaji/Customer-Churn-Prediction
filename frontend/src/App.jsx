@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -50,6 +50,10 @@ function App() {
   const [batchResults, setBatchResults] = useState([]);
   const [selectedBatchResult, setSelectedBatchResult] = useState(null);
   const [modelReady, setModelReady] = useState(null);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const aiRequestId = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -67,6 +71,31 @@ function App() {
 
   function updateField(key, value) {
     setForm(current => ({ ...current, [key]: value }));
+  }
+
+  async function loadAiAnalysis(customer) {
+    const requestId = ++aiRequestId.current;
+    setAiAnalysis(null);
+    setAiError('');
+    setAiLoading(true);
+    try {
+      const response = await fetch(`${API}/explain`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(customer),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Could not generate the AI explanation.');
+      if (requestId === aiRequestId.current) setAiAnalysis(data);
+    } catch (err) {
+      if (requestId === aiRequestId.current) setAiError(err.message || 'Could not generate the AI explanation.');
+    } finally {
+      if (requestId === aiRequestId.current) setAiLoading(false);
+    }
+  }
+
+  function openBatchDetail(customerResult) {
+    setSelectedBatchResult(customerResult);
+    setPage('batch-detail');
+    loadAiAnalysis(customerResult.customer_features);
   }
 
   async function submitSingle(event) {
@@ -88,6 +117,7 @@ function App() {
       if (!response.ok) throw new Error(data.detail || 'Prediction failed.');
       setResult(data);
       setPage('single-result');
+      loadAiAnalysis(customer);
     } catch (err) {
       setError(err.message || 'Could not contact the prediction API. Make sure the backend is running.');
     } finally {
@@ -167,11 +197,19 @@ function App() {
             <div><span className="result-label">RISK LEVEL</span><h3>{shown.risk_level}</h3></div>
             <div><span className="result-label">CHURN PROBABILITY</span><h3>{Number(shown.churn_probability).toFixed(2)}%</h3></div>
           </div>
-          <div className="result-grid">
-            <section className="result-section"><h3>Factors increasing risk</h3>{shown.risk_factors?.length ? <ul>{shown.risk_factors.map(item => <li key={item.name}>{item.name}</li>)}</ul> : <p>No factor details available.</p>}</section>
-            <section className="result-section"><h3>Factors reducing risk</h3>{shown.protective_factors?.length ? <ul>{shown.protective_factors.map(item => <li key={item.name}>{item.name}</li>)}</ul> : <p>No factor details available.</p>}</section>
-          </div>
-          <section className="result-section recommendations"><h3>Suggested retention actions</h3><ul>{shown.recommendations?.map(item => <li key={item}>{item}</li>)}</ul></section>
+          <section className="result-section ai-analysis" aria-live="polite">
+            <h3>AI-generated customer insight</h3>
+            <p className="ai-disclosure">Generated with Gemini from service and billing details and the model prediction. Gender and senior-citizen status are excluded. Free-tier prompts may be used by Google to improve its products, so use sample data only.</p>
+            {aiLoading && <p>Generating a customer-specific insight…</p>}
+            {aiError && <p className="ai-error" role="alert">{aiError}</p>}
+            {aiAnalysis && <>
+              <p className="ai-summary">{aiAnalysis.summary}</p>
+              {aiAnalysis.suggested_steps?.length > 0 && <>
+                <h4>Possible next steps</h4>
+                <ul>{aiAnalysis.suggested_steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul>
+              </>}
+            </>}
+          </section>
           <div className="form-footer result-footer"><button className="secondary-button" type="button" onClick={page === 'batch-detail' ? () => setPage('csv-result') : returnHome}>{page === 'batch-detail' ? 'Back to CSV results' : 'Start over'}</button></div>
         </section>
         );
@@ -194,11 +232,11 @@ function App() {
         <section className="page-card batch-page">
           <div className="page-title"><button className="back-link" type="button" onClick={() => setPage('csv-input')}>← Upload another file</button><h2>CSV prediction results</h2></div>
           <div className="table-scroll"><table className="results-table"><thead><tr><th>Name</th><th>Churn</th><th>Probability</th><th>Risk</th></tr></thead>
-            <tbody>{batchResults.map((row, index) => <tr key={`${row.name}-${index}`} onClick={() => { setSelectedBatchResult(row); setPage('batch-detail'); }} tabIndex="0" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedBatchResult(row); setPage('batch-detail'); } }}>
+            <tbody>{batchResults.map((row, index) => <tr key={`${row.name}-${index}`} onClick={() => openBatchDetail(row)} tabIndex="0" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openBatchDetail(row); } }}>
               <td>{row.name}</td><td className={row.churn ? 'churn-cell' : 'stay-cell'}>{row.churn ? 'Yes' : 'No'}</td><td>{Number(row.churn_probability).toFixed(2)}%</td><td>{row.risk_level}</td>
             </tr>)}</tbody>
           </table></div>
-          <p className="table-hint">Select a customer to view their factors and suggested retention actions.</p>
+          <p className="table-hint">Select a customer to generate their AI explanation and suggested next steps.</p>
         </section>
       )}
 

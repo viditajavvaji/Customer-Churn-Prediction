@@ -13,7 +13,7 @@ When the app opens, the user chooses one of two options:
 1. **Check one customer:** enter the customer's details in a form and get a prediction.
 2. **Check multiple customers:** upload a CSV file with one customer on each row and get a results table.
 
-The table is kept simple: it shows the customer's name, churn prediction, probability, and risk level. A user can select a row to open that customer's details, see which information raised or lowered the estimated risk, and read suggested retention actions.
+The table is kept simple: it shows the customer's name, churn prediction, probability, and risk level. Selecting a row opens the customer's result and generates an AI-written explanation with possible follow-up steps.
 
 The interface also has a dark mode toggle. This changes the page colors to make the app more comfortable to view in a darker setting. The choice is remembered in that browser.
 
@@ -43,9 +43,10 @@ The probability and the risk band answer slightly different questions. **Churn: 
 - **HTML and CSS** provide the form controls and the visual design. CSS also handles smaller screens and the dark mode colors.
 - **FastAPI** provides a small Python web API. It receives one customer's details or a CSV upload and sends the results back to the React app.
 - **scikit-learn** is used because the trained model and its data-preparation steps are saved in a format Python can load and use for predictions.
-- **Logistic Regression** is the model used by the app. It was trained as a class-balanced model, which gives the churn class more consideration when the training data has fewer churn examples. It also returns a probability and has feature contributions that can be used to explain factors that raise or lower risk.
+- **Logistic Regression** is the model used by the app. It was trained as a class-balanced model, which gives the churn class more consideration when the training data has fewer churn examples. It returns a probability used to report the churn risk.
 - **Decision Tree** is included in the analysis notebook as a comparison model. The notebook compares models with accuracy, precision, recall, F1-score, and confusion matrices. Keeping the experiment in the notebook makes the model comparison separate from the app that serves predictions.
 - **CSV batch prediction** avoids entering many customers one by one. The output only shows the few values needed to review the prediction, while selecting a customer opens the explanation and retention suggestions.
+- **Google Gemini API** generates a plain-language explanation and possible follow-up steps for an individual result. It is called only when a user opens a single-customer result or selects a customer from the CSV table. The backend recomputes the model prediction before requesting the explanation, and the API key stays on the backend. Gender and senior-citizen status are not sent to Gemini. Other account, service, and billing details are sent to Gemini for this feature; free-tier prompts may be used to improve Google products. Use sample data only and review AI output for accuracy. A free tier is available within its limits; when the limit is reached, the app displays an error and does not switch to paid use.
 
 ## Project parts
 
@@ -80,3 +81,5 @@ Open the local website address shown in the frontend window, usually `http://loc
 - The model expects the same kinds of fields and category values used in its training data. Use the CSV header template from the upload screen.
 - Predictions and risk bands are estimates. A business should review the customer's situation before deciding what to do.
 - The demo does not save customer records or prediction history. Do not treat it as a secured customer-data system.
+- To enable AI explanations locally, set `GEMINI_API_KEY` in the backend process environment before starting FastAPI. Optionally set `GEMINI_MODEL`; it defaults to `gemini-3.1-flash-lite`. Never put the API key in `frontend/.env` or commit it to GitHub.
+- On Render, add `GEMINI_API_KEY` to the backend Web Service's Environment Variables, then redeploy that service. Create a Free Tier key in Google AI Studio and leave billing disabled to avoid paid use. Free request quotas apply.

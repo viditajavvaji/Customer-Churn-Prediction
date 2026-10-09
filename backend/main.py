@@ -1,7 +1,10 @@
 from pathlib import Path
 from typing import Literal
 import io
+import json
 import os
+import urllib.error
+import urllib.request
 
 import joblib
 import numpy as np
@@ -82,101 +85,64 @@ class Customer(BaseModel):
     ]
 
 
-def readable_feature(name: str) -> str:
-    name = name.removeprefix("num__").removeprefix("cat__")
-    replacements = {
-        "Contract_Month-to-month": "Month-to-month contract",
-        "Contract_One year": "One-year contract",
-        "Contract_Two year": "Two-year contract",
-        "PaymentMethod_Electronic check": "Electronic check payment",
-        "PaymentMethod_Credit card (automatic)": "Automatic credit card payment",
-        "PaymentMethod_Bank transfer (automatic)": "Automatic bank transfer",
-        "PaymentMethod_Mailed check": "Mailed check payment",
-        "InternetService_Fiber optic": "Fiber optic internet",
-        "InternetService_DSL": "DSL internet",
-        "InternetService_No": "No internet service",
-        "OnlineSecurity_Yes": "Online security enabled",
-        "OnlineSecurity_No": "No online security",
-        "OnlineBackup_Yes": "Online backup enabled",
-        "OnlineBackup_No": "No online backup",
-        "DeviceProtection_Yes": "Device protection enabled",
-        "DeviceProtection_No": "No device protection",
-        "TechSupport_Yes": "Technical support enabled",
-        "TechSupport_No": "No technical support",
-        "PaperlessBilling_Yes": "Paperless billing",
-        "PaperlessBilling_No": "No paperless billing",
-        "PhoneService_Yes": "Phone service",
-        "PhoneService_No": "No phone service",
-        "MultipleLines_Yes": "Multiple phone lines",
-        "MultipleLines_No": "No multiple lines",
-        "MultipleLines_No phone service": "No phone service",
-        "Dependents_Yes": "Has dependents",
-        "Dependents_No": "No dependents",
-        "Partner_Yes": "Has a partner",
-        "Partner_No": "No partner",
-        "StreamingTV_Yes": "Streaming TV enabled",
-        "StreamingTV_No": "No streaming TV",
-        "StreamingMovies_Yes": "Streaming movies enabled",
-        "StreamingMovies_No": "No streaming movies",
-        "gender_Male": "Male",
-        "gender_Female": "Female",
-        "SeniorCitizen": "Senior citizen",
-        "tenure": "Customer tenure",
-        "MonthlyCharges": "Monthly charges",
-        "TotalCharges": "Total charges",
+def generate_ai_analysis(customer: Customer, prediction: dict) -> dict:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="AI explanations are not configured. Add GEMINI_API_KEY to the backend environment.")
+
+    # Do not send demographic fields to the external AI provider. They remain
+    # available to the saved ML model, but are not used to explain a result.
+    customer_features = customer.model_dump(exclude={"gender", "SeniorCitizen"})
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite").strip()
+    request_body = {
+        "systemInstruction": {
+            "parts": [{"text": (
+                "You explain a customer churn model result in plain, respectful language. "
+                "Use only the provided non-demographic account/service features and the model output. "
+                "Do not claim any feature caused churn or that the prediction is certain. "
+                "Do not invent information. Give a concise explanation and 2 or 3 practical, "
+                "non-coercive follow-up suggestions. Return JSON with string key 'summary' and "
+                "array-of-strings key 'suggested_steps'."
+            )}],
+        },
+        "contents": [{"parts": [{"text": json.dumps({
+            "customer_features": customer_features,
+            "model_output": prediction,
+            "task": "Explain this estimate and suggest suitable retention follow-up.",
+        })}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 300,
+            "responseMimeType": "application/json",
+        },
     }
-    return replacements.get(name, name.replace("_", " "))
-
-
-def explain_prediction(row: pd.DataFrame):
+    request = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+        data=json.dumps(request_body).encode("utf-8"),
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+        method="POST",
+    )
     try:
-        preprocessor = model.named_steps["preprocessor"]
-        classifier = model.named_steps["classifier"]
-        categorical_encoder = next(
-            transformer for name, transformer, _ in preprocessor.transformers_ if name == "cat"
-        )
-        encoded_names = [
-            f"{feature}_{category}"
-            for feature, categories in zip(CATEGORICAL_FEATURES, categorical_encoder.categories_)
-            for category in categories
-        ]
-        feature_names = [f"num__{name}" for name in NUMERIC_FEATURES] + [
-            f"cat__{name}" for name in encoded_names
-        ]
-        transformed = preprocessor.transform(row)
-        if hasattr(transformed, "toarray"):
-            transformed = transformed.toarray()
-        contributions = np.asarray(transformed)[0] * np.asarray(classifier.coef_)[0]
-        ranked = sorted(zip(feature_names, contributions), key=lambda item: item[1], reverse=True)
-        toward = [{"name": readable_feature(str(name)), "impact": round(float(value), 3)} for name, value in ranked if value > 0][:5]
-        away = [{"name": readable_feature(str(name)), "impact": round(float(value), 3)} for name, value in reversed(ranked) if value < 0][:5]
-        return toward, away
-    except (AttributeError, KeyError, TypeError, ValueError):
-        return [], []
-
-
-def get_recommendations(row: pd.DataFrame, risk: str, risk_factors: list[dict]):
-    if risk == "Low":
-        return ["Maintain regular engagement and continue monitoring customer satisfaction."]
-    factors = {item["name"] for item in risk_factors}
-    recommendations = []
-    if "Month-to-month contract" in factors:
-        recommendations.append("Consider a personalized incentive to move the customer to a longer-term contract.")
-    if "Electronic check payment" in factors:
-        recommendations.append("Encourage an automatic payment method if it suits the customer.")
-    if "No online security" in factors:
-        recommendations.append("Explain available online security services and their benefits.")
-    if "No technical support" in factors:
-        recommendations.append("Offer technical support or a plan that includes support.")
-    if "Fiber optic internet" in factors:
-        recommendations.append("Review the internet plan and offer suitable service or pricing options.")
-    if "Monthly charges" in factors:
-        recommendations.append("Review the current plan for a suitable pricing or plan adjustment.")
-    if "Paperless billing" in factors:
-        recommendations.append("Review billing preferences and explain available billing options.")
-    if row.iloc[0]["tenure"] < 12:
-        recommendations.append("Provide additional onboarding and early-stage customer support.")
-    return recommendations or ["Offer personalized engagement and monitor future churn risk."]
+        with urllib.request.urlopen(request, timeout=35) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        content = payload["candidates"][0]["content"]["parts"][0]["text"]
+        generated = json.loads(content)
+        summary = generated.get("summary")
+        steps = generated.get("suggested_steps")
+        if not isinstance(summary, str) or not summary.strip() or not isinstance(steps, list):
+            raise ValueError("The AI response did not contain the expected fields.")
+        steps = [step.strip() for step in steps if isinstance(step, str) and step.strip()][:3]
+        return {"summary": summary.strip(), "suggested_steps": steps}
+    except HTTPException:
+        raise
+    except urllib.error.HTTPError as exc:
+        if exc.code == 429:
+            raise HTTPException(status_code=429, detail="Gemini's free request limit was reached. Wait and try again later.") from exc
+        raise HTTPException(status_code=502, detail="Gemini rejected the request. Check the backend AI configuration.") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail="Gemini could not be reached. Try again shortly.") from exc
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail="Gemini returned an invalid explanation. Try again.") from exc
 
 
 @app.get("/health")
@@ -205,19 +171,36 @@ def predict(customer: Customer):
         probability = float(probabilities[churn_index])
         churn = str(predicted).strip().lower() in {"1", "yes", "true", "churn"}
         risk = risk_level(probability)
-        risk_factors, protective_factors = explain_prediction(row)
         return {
             "churn": churn,
             "label": "Likely to churn" if churn else "Likely to stay",
             "prediction": "Churn" if churn else "No Churn",
             "churn_probability": round(probability * 100, 2),
             "risk_level": risk,
-            "risk_factors": risk_factors,
-            "protective_factors": protective_factors,
-            "recommendations": get_recommendations(row, risk, risk_factors),
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {type(exc).__name__}: {exc}") from exc
+
+
+@app.post("/explain")
+def explain_customer(customer: Customer):
+    if model is None:
+        raise HTTPException(status_code=503, detail=f"Model could not be loaded. Check backend setup: {model_error}")
+    row = pd.DataFrame([customer.model_dump()], columns=FEATURES)
+    try:
+        predicted = model.predict(row)[0]
+        probability = float(model.predict_proba(row)[0][positive_class_index()])
+        churn = str(predicted).strip().lower() in {"1", "yes", "true", "churn"}
+        prediction = {
+            "prediction": "Churn" if churn else "No Churn",
+            "risk_level": risk_level(probability),
+            "churn_probability": round(probability * 100, 2),
+        }
+        return generate_ai_analysis(customer, prediction)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"AI explanation failed: {type(exc).__name__}: {exc}") from exc
 
 
 @app.post("/predict-csv")
@@ -293,19 +276,15 @@ async def predict_csv(request: Request):
     results = []
     for index, (predicted, probability) in enumerate(zip(predictions, probabilities)):
         churn = str(predicted).strip().lower() in {"1", "yes", "true", "churn"}
-        customer = rows.iloc[index]
         row_frame = rows.iloc[[index]]
         probability = float(probability)
         risk = risk_level(probability)
-        risk_factors, protective_factors = explain_prediction(row_frame)
         results.append({
             "name": customer_names.iloc[index] or f"Customer {index + 1}",
             "churn": churn,
             "prediction": "Churn" if churn else "No Churn",
             "churn_probability": round(probability * 100, 2),
             "risk_level": risk,
-            "risk_factors": risk_factors,
-            "protective_factors": protective_factors,
-            "recommendations": get_recommendations(row_frame, risk, risk_factors),
+            "customer_features": json.loads(row_frame.iloc[0].to_json()),
         })
     return {"count": len(results), "results": results}
